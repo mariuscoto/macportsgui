@@ -1,0 +1,131 @@
+#/usr/bin/osascript -e 'do shell script "port selfupdate" with administrator privileges'
+
+frame .head -background "#999" -height 40
+pack .head -fill both
+
+
+# Init list
+proc init_list {} {
+	global list
+	set data [exec port installed]
+	set list [split $data "\n"]
+	#remove first element
+	set list [lreplace $list 0 0]
+}
+init_list
+
+
+# loader
+set img [image create photo -file logo.gif]
+label .head.load -image $img
+pack .head.load -side left
+
+
+# message canvas
+canvas .head.can -height 25
+.head.can create text 30 18 -text "Let's go!"
+pack .head.can -side left -expand true -fill both
+
+
+# search box
+entry .head.input -textvariable search-string
+button .head.bt-search -text "Search" -command {
+	puts "Cauta ${search-string}"
+}
+pack .head.bt-search -pady 5 -side right
+pack .head.input -side right
+
+
+frame .fr -background "#333" -relief raised -borderwidth 1
+pack .fr -fill both
+
+frame .fr.left -width 30
+pack .fr.left -side left
+
+# list + handlers
+listbox .fr.left.lb -width 30 -height 0
+bind .fr.left.lb <<ListboxSelect>> [list gotSelectEvent %W]
+proc gotSelectEvent {w} {
+	global list
+	set select [lindex $list [$w curselection]]
+	set select [lindex [split $select " "] 2]
+	populate $select
+}
+proc lostSelection {w} {
+  if { [$w cget -exportselection] == 1 } {
+     puts "Listbox $w lost selection"
+     $w selection clear 0 end
+     event generate $w <<ListboxSelect>>
+  }
+}
+
+
+#.lb insert 0 sample stuff colors red yellow green
+set i -1
+foreach item $list {
+	.fr.left.lb insert [incr $i] $item
+}
+pack .fr.left.lb
+
+# main
+frame .fr.main -background "#111"
+pack .fr.main -side left -fill both -expand 1
+
+listbox .fr.main.keys -selectbackground "#FFFFFF" -selectborderwidth 0 -borderwidth 0 -width 20
+pack .fr.main.keys -side left -fill both
+listbox .fr.main.vals -selectbackground "#FFFFFF" -selectborderwidth 0 -borderwidth 0
+pack .fr.main.vals -side left -fill both -expand 1
+
+# right menu
+frame .fr.right -width 20
+pack .fr.right -side right -fill both
+button .fr.right.bt-update -text "Update" -command {exec port selfupdate}
+pack .fr.right.bt-update -side bottom
+
+
+proc populate {name} {
+	set res [exec port info $name]
+	# Clear keys and vals, remove buttons
+	.fr.main.keys delete 0 end
+	.fr.main.vals delete 0 end
+	destroy .fr.right.bt-remove
+
+	# put general info
+	set header {Name Description Homepage Platform License Maintainers}
+	for {set i 0} {$i < 10} {incr i} {
+		.fr.main.keys insert $i [lindex $header $i]
+		.fr.main.vals insert $i [parse $res [lindex $header $i]]
+		if {[expr {($i % 2) == 0}]} {
+			.fr.main.keys itemconfigure $i -background "#FFF"
+			.fr.main.vals itemconfigure $i -background "#FFF"
+		}
+	}
+
+	# Buttons
+	global port line cmd
+	#set port $name
+	set cmd ""
+	append cmd [lindex [split $port " "] 0] " " [lindex [split $port " "] 1]
+	button .fr.right.bt-remove -text "Remove" -command { exec bash cmd.sh uninstall $cmd }
+	pack .fr.right.bt-remove -side top
+}
+
+proc parse {str token} {
+	set list [split $str "\n"]
+	if {$token == "Name"} {
+		global port
+		set port [lindex $list 0]
+		return [lindex $list 0]
+	}
+	foreach line $list {
+		if {[string match "*${token}*" $line]} {
+			if {$token == "Homepage"} {
+				return [string trim [lindex [split $line " "] end]]
+			}
+			return [string trim [lindex [split $line ":"] 1]]
+		}
+	}
+}
+
+wm title . "MacPorts"
+wm geometry . 800x600+300+300
